@@ -5,6 +5,11 @@
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify
+import linkFinderAI
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+from flask import send_file
+import io
 
 app = Flask(__name__)
 availableCategories = ['br', 'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg',
@@ -38,7 +43,7 @@ def categoryTarget(category: str) -> str:
     if ((len(category) != 2) or (category not in availableCategories)):
         errorMessage = "Invalid Category"
         return ""
-
+    
     return baseURL + category
 
 
@@ -64,19 +69,30 @@ def Concursos(categorySelect):
         print("Developer: This is a security issue, do not propagate None result")
         abort(jsonify(message=errorMessage, code=400))
 
-    availableItemsInCategory = pageScraper.find('div', class_='list-concursos').find('tbody').find_all('tr') # type: ignore
- 
-    for item in availableItemsInCategory:
-        concursosAvailable.append({
+    listConcursosTable = pageScraper.find('table')
+    if listConcursosTable is None:
+        abort(jsonify(message="No concursos found", code=404))
+    
+    tableBody = listConcursosTable.find('tbody')
+    if tableBody is None:
+        abort(jsonify(message="No concursos found in the table", code=404))
+    
+    availableItemsInCategory = tableBody.find_all('tr')
+    
+    def process_concurso(item):
+        concurso = {
             'organization': item.find('a').text.rstrip(),
             'workPlacesAvailable': item.find_all('td')[1].text.rstrip(),
             'link': item.find('a').get('href'),
             'status': getCategoryItemStatus(item)
-        })
+        }
+        concurso['aiGeneratedLink'] = linkFinderAI.process_url_links(concurso['link'])
+        return concurso
 
-    #print(concursosAvailable)
+    with ThreadPoolExecutor() as executor:
+        concursosAvailable = list(executor.map(process_concurso, availableItemsInCategory))
+
     return jsonify(concursosAvailable)
-
 
 if __name__ == "__main__":
     app.run()
