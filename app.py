@@ -2,6 +2,7 @@
     ConcursosNoBrasil web scrapper and API
 '''
 
+import time
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify
@@ -9,7 +10,7 @@ import linkFinderAI
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from flask import send_file
-import io
+from openai import OpenAI
 
 app = Flask(__name__)
 availableCategories = ['br', 'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg',
@@ -68,11 +69,11 @@ def Concursos(categorySelect):
     if(pageScraper == None):
         print("Developer: This is a security issue, do not propagate None result")
         abort(jsonify(message=errorMessage, code=400))
-
+    
     listConcursosTable = pageScraper.find('table')
     if listConcursosTable is None:
         abort(jsonify(message="No concursos found", code=404))
-    
+
     tableBody = listConcursosTable.find('tbody')
     if tableBody is None:
         abort(jsonify(message="No concursos found in the table", code=404))
@@ -86,13 +87,14 @@ def Concursos(categorySelect):
             'link': item.find('a').get('href'),
             'status': getCategoryItemStatus(item)
         }
-        concurso['aiGeneratedLink'] = linkFinderAI.process_url_links(concurso['link'])
+        concurso['aiGeneratedLink'] = linkFinderAI.process_concursos_links(concurso['link'])
         return concurso
 
     with ThreadPoolExecutor() as executor:
         concursosAvailable = list(executor.map(process_concurso, availableItemsInCategory))
 
     return jsonify(concursosAvailable)
+        
 
 if __name__ == "__main__":
     app.run()
