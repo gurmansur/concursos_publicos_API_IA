@@ -14,18 +14,16 @@ def fetch_page(url):
     return BeautifulSoup(response.text, 'html.parser')
 
 # Function to extract links and their text
-def extract_links(soup, extract_parent_text=False):
+def extract_links(soup):
     links = []
-    print(soup)
-
-    for a_tag in soup.find_all('a', href=True):
-        link_text = a_tag.get_text()
-        if extract_parent_text:
-            parent_text = a_tag.find_parent().get_text() if a_tag.find_parent() else ''
-            current_sentence = parent_text.split(link_text)[0].split('.')[-1].strip() + ' ' + link_text
-            links.append((a_tag['href'], current_sentence.strip()))
-        else:
-            links.append((a_tag['href'], link_text))
+    article_body = soup.find('div', itemprop='articleBody')
+    if article_body:
+        for p_tag in article_body.find_all('p'):
+            for a_tag in p_tag.find_all('a', href=True):
+                link_text = a_tag.get_text()
+                parent_text = a_tag.find_parent().get_text() if a_tag.find_parent() else ''
+                current_sentence = parent_text.split(link_text)[0].split('.')[-1].strip() + ' ' + link_text
+                links.append((a_tag['href'], current_sentence.strip()))
     return links
     
 load_dotenv()
@@ -38,10 +36,9 @@ client = OpenAI(
 # Example usage
 def process_concursos_links(url):
     soup = fetch_page(url)
-    links = extract_links(soup, extract_parent_text=True)
+    links = extract_links(soup)
 
-    # Filter out links pointing to https://concursosnobrasil.com/ or links that don't start with 'https://'
-    links = [(link, text) for link, text in links if not link.startswith('/') and 'concursosnobrasil.com' not in link]
+    links = [(link, text) for link, text in links if not link.startswith('/') and 'pciconcursos.com' not in link]
 
     if not links:
         return []
@@ -61,8 +58,9 @@ def process_concursos_links(url):
 
 def process_other_links(url):
     soup = fetch_page(url)
-    
-    links = soup.find_all('a', href=True)
+    links = extract_links(soup)
+
+    links = [(link, text) for link, text in links if not link.startswith('/') and 'pciconcursos.com' not in link]
 
     if not links:
         return []
@@ -81,5 +79,5 @@ def process_other_links(url):
     return response.choices[0].message.content
 
 if __name__ == "__main__":
-    url = 'https://concursosnobrasil.com/concursos/br/2025/01/24/concurso-do-ibama/'
+    url = 'https://www.pciconcursos.com.br/noticias/aeronautica-anuncia-novo-processo-seletivo-para-o-curso-de-formacao-de-sargentos'
     print(process_concursos_links(url))
