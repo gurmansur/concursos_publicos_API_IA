@@ -1,15 +1,8 @@
-'''
-    ConcursosNoBrasil web scrapper and API
-'''
-
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify
 import linkFinderAI
 from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
-from flask import send_file
-from openai import OpenAI
 
 app = Flask(__name__)
 availableCategories = ['br', 'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg',

@@ -1,10 +1,6 @@
 from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.utils import shuffle
-from pandas import DataFrame
 import os
 from dotenv import load_dotenv
 
