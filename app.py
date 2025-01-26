@@ -53,7 +53,7 @@ def Greetings():
     return 'Hello! The API is Alive'
 
 
-@app.route('/concursos/', methods=['GET'])
+@app.route('/concursos', methods=['GET'])
 def Concursos():
     concursosAvailable = []
     urls = [baseURL + 'nacional/', baseURL + 'sp/sao-paulo']
@@ -112,7 +112,10 @@ def Concursos():
     for url in urls:
         concursosAvailable.extend(process_url(url))
 
-    return jsonify(concursosAvailable)
+    response = jsonify(concursosAvailable)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response
         
 
 if __name__ == "__main__":
