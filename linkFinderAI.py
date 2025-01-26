@@ -56,28 +56,6 @@ def process_concursos_links(url):
 
     return response.choices[0].message.content
 
-def process_other_links(url):
-    soup = fetch_page(url)
-    links = extract_links(soup)
-
-    links = [(link, text) for link, text in links if not link.startswith('/') and 'pciconcursos.com' not in link]
-
-    if not links:
-        return []
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Você é um assistente de IA."},
-            {"role": "user", "content": "Algum desses links é utilizado para realizar a inscrição no concurso? Se sim, responda com apenas o link. Se não, responda com 'não'."},
-            {"role": "user", "content": f"Aqui está a lista de links extraídos: {links}"},
-        ],
-        max_tokens=100,
-        stop=["\n"],
-    );
-
-    return response.choices[0].message.content
-
 if __name__ == "__main__":
     url = 'https://www.pciconcursos.com.br/noticias/aeronautica-anuncia-novo-processo-seletivo-para-o-curso-de-formacao-de-sargentos'
     print(process_concursos_links(url))
