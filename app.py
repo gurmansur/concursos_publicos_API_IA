@@ -48,12 +48,12 @@ def getCategoryItemStatus(item) -> str:
 
     return 'expected'
 
-@app.route('/')
+@app.route('/api/')
 def Greetings():
     return 'Hello! The API is Alive'
 
 
-@app.route('/concursos', methods=['GET'])
+@app.route('/api/concursos', methods=['GET'])
 def Concursos():
     concursosAvailable = []
     urls = [baseURL + 'nacional/', baseURL + 'sp/sao-paulo']
@@ -104,6 +104,8 @@ def Concursos():
             }
 
             concurso['aiGeneratedLink'] = linkFinderAI.process_concursos_links(concurso['link'])
+            if concurso['aiGeneratedLink'] == 'não':
+                concurso['aiGeneratedLink'] = None
             return concurso
 
         with ThreadPoolExecutor() as executor:
