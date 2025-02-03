@@ -1,14 +1,64 @@
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify
-import linkFinderAI
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
+import os
+from openai import OpenAI
 
 app = Flask(__name__)
 availableCategories = ['br', 'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg',
                        'ms', 'mt', 'pa', 'pb', 'pe', 'pi', 'pr', 'rj', 'rn', 'ro', 'rr', 'rs', 'sc', 'se', 'sp', 'to']
 baseURL = 'https://www.pciconcursos.com.br/concursos/'
 errorMessage = ''
+
+# Function to fetch and parse the webpage
+def fetch_page(url):
+    response = requests.get(url)
+    return BeautifulSoup(response.text, 'html.parser')
+
+# Function to extract links and their text
+def extract_links(soup):
+    links = []
+    article_body = soup.find('div', itemprop='articleBody')
+    if article_body:
+        for p_tag in article_body.find_all('p'):
+            for a_tag in p_tag.find_all('a', href=True):
+                link_text = a_tag.get_text()
+                parent_text = a_tag.find_parent().get_text() if a_tag.find_parent() else ''
+                current_sentence = parent_text.split(link_text)[0].split('.')[-1].strip() + ' ' + link_text
+                links.append((a_tag['href'], current_sentence.strip()))
+    return links
+    
+load_dotenv()
+api_key = os.getenv('OPENAI_API_KEY')
+
+client = OpenAI(
+    api_key=api_key
+);
+
+# Example usage
+def process_concursos_links(url):
+    soup = fetch_page(url)
+    links = extract_links(soup)
+
+    links = [(link, text) for link, text in links if not link.startswith('/') and 'pciconcursos.com' not in link]
+
+    if not links:
+        return []
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Você é um assistente de IA."},
+            {"role": "user", "content": "Algum desses links é utilizado para realizar a inscrição no concurso? Se sim, responda com apenas o link. Se não, responda com 'não'."},
+            {"role": "user", "content": f"Aqui está a lista de links extraídos: {links}"},
+        ],
+        max_tokens=100,
+        stop=["\n"],
+    );
+
+    return response.choices[0].message.content
 
 def pageRequest(url: str):
     try:
@@ -103,7 +153,7 @@ def Concursos():
             'deadline': deadline_text
             }
 
-            concurso['aiGeneratedLink'] = linkFinderAI.process_concursos_links(concurso['link'])
+            concurso['aiGeneratedLink'] = process_concursos_links(concurso['link'])
             if concurso['aiGeneratedLink'] == 'não':
                 concurso['aiGeneratedLink'] = None
             return concurso
