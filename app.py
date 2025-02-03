@@ -1,16 +1,8 @@
-'''
-    ConcursosNoBrasil web scrapper and API
-'''
-
-import time
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, abort, jsonify
 import linkFinderAI
 from concurrent.futures import ThreadPoolExecutor
-import pandas as pd
-from flask import send_file
-from openai import OpenAI
 
 app = Flask(__name__)
 availableCategories = ['br', 'ac', 'al', 'am', 'ap', 'ba', 'ce', 'df', 'es', 'go', 'ma', 'mg',
@@ -56,12 +48,12 @@ def getCategoryItemStatus(item) -> str:
 
     return 'expected'
 
-@app.route('/')
+@app.route('/api/')
 def Greetings():
     return 'Hello! The API is Alive'
 
 
-@app.route('/concursos/', methods=['GET'])
+@app.route('/api/concursos', methods=['GET'])
 def Concursos():
     concursosAvailable = []
     urls = [baseURL + 'nacional/', baseURL + 'sp/sao-paulo']
@@ -111,7 +103,9 @@ def Concursos():
             'deadline': deadline_text
             }
 
-            concurso['aiGeneratedLink'] = linkFinderAI.process_url_links(concurso['link'])
+            concurso['aiGeneratedLink'] = linkFinderAI.process_concursos_links(concurso['link'])
+            if concurso['aiGeneratedLink'] == 'não':
+                concurso['aiGeneratedLink'] = None
             return concurso
 
         with ThreadPoolExecutor() as executor:
@@ -120,7 +114,10 @@ def Concursos():
     for url in urls:
         concursosAvailable.extend(process_url(url))
 
-    return jsonify(concursosAvailable)
+    response = jsonify(concursosAvailable)
+    response.headers.add('Access-Control-Allow-Origin', '*')
+
+    return response
         
 
 if __name__ == "__main__":
