@@ -48,7 +48,7 @@ def getCategoryItemStatus(item) -> str:
 
     return 'expected'
 
-@app.route('/api/')
+@app.route('/')
 def Greetings():
     return 'Hello! The API is Alive'
 
