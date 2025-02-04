@@ -14,8 +14,13 @@ errorMessage = ''
 
 # Function to fetch and parse the webpage
 def fetch_page(url):
-    response = requests.get(url)
-    return BeautifulSoup(response.text, 'html.parser')
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return BeautifulSoup(response.text, 'html.parser')
+    except requests.RequestException as e:
+        print(f"Error fetching page: {e}")
+        return None
 
 # Function to extract links and their text
 def extract_links(soup):
@@ -29,19 +34,18 @@ def extract_links(soup):
                 current_sentence = parent_text.split(link_text)[0].split('.')[-1].strip() + ' ' + link_text
                 links.append((a_tag['href'], current_sentence.strip()))
     return links
-    
+
 load_dotenv()
 api_key = os.getenv('OPENAI_API_KEY')
 
-client = OpenAI(
-    api_key=api_key
-);
+client = OpenAI(api_key=api_key)
 
 # Example usage
 def process_concursos_links(url):
     soup = fetch_page(url)
+    if not soup:
+        return None
     links = extract_links(soup)
-
     links = [(link, text) for link, text in links if not link.startswith('/') and 'pciconcursos.com' not in link]
 
     if not links:
@@ -54,94 +58,63 @@ def process_concursos_links(url):
             {"role": "user", "content": "Algum desses links é utilizado para realizar a inscrição no concurso? Se sim, responda com apenas o link. Se não, responda com 'não'."},
             {"role": "user", "content": f"Aqui está a lista de links extraídos: {links}"},
         ],
-        max_tokens=100,
+        max_tokens=500,
         stop=["\n"],
-    );
+    )
 
     return response.choices[0].message.content
 
-def pageRequest(url: str):
-    try:
-        return requests.get(url)
-    except requests.HTTPError:
-        print("An http error has ocurred, process has exited")
+def init_web_scraper(url, parser='html.parser'):
+    soup = fetch_page(url)
+    if not soup:
+        print("Canceling scraping")
         return None
-    except:
-        print("An error has ocurred, process has exited")
-        return None
+    return soup
 
-
-def initWebScraper(url: str, parser: str = 'html.parser'):
-    webResponse = pageRequest(url)
-
-    if(webResponse == None):
-        print("Canceling scrapping")
-        return None
-
-    return BeautifulSoup(webResponse.content, parser)
-
-
-def categoryTarget(category: str) -> str:
-    global errorMessage 
-    if ((len(category) != 2) or (category not in availableCategories)):
+def category_target(category):
+    global errorMessage
+    if len(category) != 2 or category not in availableCategories:
         errorMessage = "Invalid Category"
         return ""
-    
     return baseURL + category
 
-
-def getCategoryItemStatus(item) -> str:
-    try:
-        item.find('span', class_='label-previsto').text
-    except:
-        return 'open'
-
-    return 'expected'
+def get_category_item_status(item):
+    return 'expected' if item.find('span', class_='label-previsto') else 'open'
 
 @app.route('/')
-def Greetings():
+def greetings():
     return 'Hello! The API is Alive'
 
-
 @app.route('/api/concursos', methods=['GET'])
-def Concursos():
-    concursosAvailable = []
+def concursos():
+    concursos_available = []
     urls = [baseURL + 'nacional/', baseURL + 'sp/sao-paulo']
 
-    def process_url(url):
-        pageScraper = initWebScraper(url)
-        if pageScraper is None:
-            print("Developer: This is a security issue, do not propagate None result")
-            abort(jsonify(message=errorMessage, code=400))
+    def process_concurso(item):
+        cd_div = item.find('div', class_='cd')
+        vacancies_text = cd_div.text.split('vaga')[0].strip()
+        vacancies = int(vacancies_text.split()[-1]) if vacancies_text.split()[-1].isdigit() else 1
 
-        listConcursosDiv = pageScraper.find('div', id='concursos')
-        availableItemsInCategory = listConcursosDiv.find_all('div', class_='na')
+        salary = 'N/A'
+        profession = 'N/A'
+        level = 'N/A'
 
-        def process_concurso(item):
-            cd_div = item.find('div', class_='cd')
-            vacancies_text = cd_div.text.split('vaga')[0].strip()
-            vacancies = int(vacancies_text.split()[-1]) if vacancies_text.split()[-1].isdigit() else 1
+        if 'R$' in cd_div.text:
+            salary = 'R$ ' + cd_div.text.split('R$')[1].split('<br>')[0].strip()
 
-            salary = 'N/A'
-            profession = 'N/A'
-            level = 'N/A'
+        span_elements = cd_div.find_all('span')
+        if span_elements:
+            profession = span_elements[0].text.strip()
+        if len(span_elements) > 1:
+            level = span_elements[1].text.strip()
 
-            if 'R$' in cd_div.text:
-                salary = 'R$ ' + cd_div.text.split('R$')[1].split('<br>')[0].strip()
+        salary = salary.replace(profession, '').strip()
+        profession = profession.replace(level, '').strip()
 
-            span_elements = cd_div.find_all('span')
-            if len(span_elements) > 0:
-                profession = span_elements[0].text.strip()
-            if len(span_elements) > 1:
-                level = span_elements[1].text.strip()
+        location = item.find('div', class_='cc').text.rstrip() if item.find('div', class_='cc') and item.find('div', class_='cc').text.strip() else 'Nacional'
+        deadline_text = item.find('div', class_='ce').text.rstrip().replace('a', 'a ').strip()
 
-            salary = salary.replace(profession, '').strip()
-            profession = profession.replace(level, '').strip()
-
-            location = item.find('div', class_='cc').text.rstrip() if item.find('div', class_='cc') and item.find('div', class_='cc').text.strip() else 'Nacional'
-            deadline_text = item.find('div', class_='ce').text.rstrip().replace('a', 'a ').strip()
-
-            concurso = {
+        concurso = {
             'organization': item.find('a').text.rstrip(),
             'location': location,
             'vacancies': vacancies,
@@ -149,26 +122,33 @@ def Concursos():
             'profession': profession,
             'level': level,
             'link': item.find('a').get('href'),
-            'status': getCategoryItemStatus(item),
+            'status': get_category_item_status(item),
             'deadline': deadline_text
-            }
+        }
 
-            concurso['aiGeneratedLink'] = process_concursos_links(concurso['link'])
-            if concurso['aiGeneratedLink'] == 'não':
-                concurso['aiGeneratedLink'] = None
-            return concurso
+        concurso['aiGeneratedLink'] = process_concursos_links(concurso['link'])
+        if concurso['aiGeneratedLink'] == 'não':
+            concurso['aiGeneratedLink'] = None
+        return concurso
 
-        with ThreadPoolExecutor() as executor:
-            return list(executor.map(process_concurso, availableItemsInCategory))
+    def process_url(url):
+        page_scraper = init_web_scraper(url)
+        if not page_scraper:
+            abort(jsonify(message=errorMessage, code=400))
+
+        list_concursos_div = page_scraper.find('div', id='concursos')
+        available_items_in_category = list_concursos_div.find_all('div', class_='na')
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            return list(executor.map(process_concurso, available_items_in_category))
 
     for url in urls:
-        concursosAvailable.extend(process_url(url))
+        concursos_available.extend(process_url(url))
 
-    response = jsonify(concursosAvailable)
+    response = jsonify(concursos_available)
     response.headers.add('Access-Control-Allow-Origin', '*')
 
     return response
-        
 
 if __name__ == "__main__":
     app.run()
